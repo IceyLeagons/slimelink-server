@@ -1,0 +1,15 @@
+net/iceyleagons/VoiceSettings.java
+ net.iceyleagons.VoiceSettings
+ net.iceyleagons.VoiceSettings$ActivationType
+ net.iceyleagons.VoiceSettings$NoiseSuppression
+net/iceyleagons/VoiceServer.java
+ net.iceyleagons.VoiceServer
+ net.iceyleagons.VoiceServer$1
+ net.iceyleagons.VoiceServer$RemoteClient
+net/iceyleagons/Main.java
+ net.iceyleagons.Main
+net/iceyleagons/VoicePacket.java
+ net.iceyleagons.VoicePacket
+ net.iceyleagons.VoicePacket$PacketType
+ net.iceyleagons.VoicePacket$Position
+ net.iceyleagons.VoicePacket$SyncData
