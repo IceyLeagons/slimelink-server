@@ -1,4 +1,4 @@
-package net.iceyleagons;
+package net.iceyleagons.slimelink;
 
 import lombok.Data;
 

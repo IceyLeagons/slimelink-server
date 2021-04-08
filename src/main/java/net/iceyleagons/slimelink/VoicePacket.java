@@ -1,13 +1,16 @@
-package net.iceyleagons;
+package net.iceyleagons.slimelink;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import net.iceyleagons.VoiceSettings.NoiseSuppression;
+import net.iceyleagons.slimelink.server.ServerUtils;
+import net.iceyleagons.slimelink.utils.GZIPUtils;
+import net.iceyleagons.slimelink.VoiceSettings.NoiseSuppression;
+import org.java_websocket.WebSocket;
 
-import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.util.Base64;
 
 @AllArgsConstructor
@@ -46,15 +49,27 @@ public class VoicePacket {
         this.position = position;
     }
 
-    public void send(DataOutputStream stream) throws IOException {
-        stream.writeUTF(VoiceServer.gson.toJson(this));
+    public void send(OutputStream stream) throws IOException {
+        stream.write(compress());
+    }
+
+    public void send(WebSocket socket) throws IOException {
+        socket.send(compress());
+    }
+
+    public byte[] compress() {
+        return GZIPUtils.gzipCompress(toString().getBytes());
+    }
+
+    @Override
+    public String toString() {
+        return ServerUtils.gson.toJson(this);
     }
 
     @AllArgsConstructor
     @Data
     public static class Position {
         double x, y, z;
-
 
         public double dot(Position other) {
             return x * other.x + y * other.y + z * other.z;
@@ -74,7 +89,7 @@ public class VoicePacket {
     }
 
     public enum PacketType {
-        PLAYER_JOIN, PLAYER_LEAVE, SYNC, VOICE_SEND, VOICE_RECEIVE
+        READY, CLIENT_LEAVE, SYNC, VOICE
     }
 
     @AllArgsConstructor

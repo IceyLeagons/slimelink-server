@@ -1,10 +1,8 @@
-package net.iceyleagons;
+package net.iceyleagons.slimelink.server;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import lombok.Getter;
 import lombok.SneakyThrows;
-import net.iceyleagons.VoiceSettings.NoiseSuppression;
+import net.iceyleagons.slimelink.VoicePacket;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -14,35 +12,34 @@ import java.net.Socket;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.stream.Collectors;
 
 public class VoiceServer {
-    private final ExecutorService executorService = Executors.newCachedThreadPool();
     private ServerSocket serverSocket;
 
-    public static Gson gson = new GsonBuilder().create();
-    public static VoicePacket.SyncData serverSettings = new VoicePacket.SyncData(48_000, 16, 960 * 10, true, 15.d, new NoiseSuppression[]{NoiseSuppression.NONE, NoiseSuppression.RNNoise});
     private String settings;
 
-    public static double maxDistance = 15.d;
+    private final int port;
+
+    public VoiceServer(int port) {
+        recomputeSettings();
+        this.port = port;
+    }
 
     public Map<String, RemoteClient> playerMap = new HashMap<>();
 
     public void start() {
         new Thread(() -> {
             try {
-                serverSocket = new ServerSocket(8769);
+                serverSocket = new ServerSocket(port);
 
                 while (true) {
                     Socket socket = serverSocket.accept();
 
-                    VoicePacket packet = gson.fromJson(new DataInputStream(socket.getInputStream()).readUTF(), VoicePacket.class);
+                    VoicePacket packet = ServerUtils.gson.fromJson(new DataInputStream(socket.getInputStream()).readUTF(), VoicePacket.class);
                     if (packet.packetType != VoicePacket.PacketType.SYNC) {
                         // Something really bad happened. Disconnect the client.
                         socket.close();
-                    } else executorService.execute(() -> onClientSync(socket, packet));
+                    } else ServerUtils.executorService.execute(() -> onClientSync(socket, packet));
                 }
             } catch (IOException ioException) {
                 ioException.printStackTrace();
@@ -88,25 +85,22 @@ public class VoiceServer {
                 try {
                     while (connected) {
                         String packetRaw = inputStream.readUTF();
-                        VoicePacket packet = gson.fromJson(packetRaw, VoicePacket.class);
+                        VoicePacket packet = ServerUtils.gson.fromJson(packetRaw, VoicePacket.class);
 
                         switch (packet.packetType) {
                             default:
-                            case VOICE_SEND:
+                            case VOICE:
                                 handleVoice(packet);
                                 break;
-                            case PLAYER_JOIN:
+                            case READY:
                                 // Ignore.
                                 break;
-                            case PLAYER_LEAVE:
+                            case CLIENT_LEAVE:
                                 onClientDisconnect(packet);
                                 disconnect();
                                 break;
                             case SYNC:
                                 // Something happened that caused the client to try to sync twice.
-                            case VOICE_RECEIVE:
-                                // Something really bad happened, the client SHOULDN'T be sending VOICE_RECEIVEs towards the server
-                                disconnect();
                                 break;
                         }
                     }
@@ -137,7 +131,7 @@ public class VoiceServer {
 
         @SneakyThrows
         public void sendPacket(VoicePacket packet) {
-            outputStream.writeUTF(gson.toJson(packet));
+            outputStream.writeUTF(ServerUtils.gson.toJson(packet));
         }
 
         public void handleVoice(VoicePacket packet) {
@@ -145,25 +139,21 @@ public class VoiceServer {
             this.dead = packet.dead;
             this.impostor = packet.impostor;
 
-            broadcast(VoicePacket.PacketType.VOICE_RECEIVE, packet);
+            broadcast(VoicePacket.PacketType.VOICE, packet);
         }
     }
 
-    private final boolean debug = false;
-
-    private static final boolean impostorChat = false;
-
     public void broadcast(VoicePacket.PacketType packetType, VoicePacket originalPacket) {
-        executorService.execute(() -> {
+        ServerUtils.executorService.execute(() -> {
             VoicePacket packet = clonePacket(packetType, originalPacket, false);
 
-            if (!debug)
+            if (!ServerUtils.debug)
                 Arrays.stream(packet.playerNames)
                         .filter(name -> !name.equals(originalPacket.playerName))
                         .filter(playerMap::containsKey)
                         .map(playerMap::get)
-                        .filter(client -> packet.dead == client.dead || !packet.dead || !impostorChat && packet.impostor && client.isImpostor())
-                        .filter(client -> maxDistance > packet.position.distanceTo(client.lastKnownPosition))
+                        .filter(client -> packet.dead == client.dead || !packet.dead || ServerUtils.impostorChat && packet.impostor && client.isImpostor())
+                        .filter(client -> ServerUtils.serverSettings.hearingRange > packet.position.distanceTo(client.lastKnownPosition))
                         .forEach(client -> {
                             if (client.isImpostor() && packet.impostor)
                                 client.sendPacket(clonePacket(packetType, originalPacket, true));
@@ -174,11 +164,7 @@ public class VoiceServer {
     }
 
     public void recomputeSettings() {
-        settings = gson.toJson(serverSettings);
-    }
-
-    public VoiceServer() {
-        recomputeSettings();
+        settings = ServerUtils.gson.toJson(ServerUtils.serverSettings);
     }
 
     public VoicePacket createPacket(VoicePacket.PacketType packetType, String data) {
