@@ -12,7 +12,7 @@ public class ServerUtils {
 
     public static final ExecutorService executorService = Executors.newCachedThreadPool();
     public static final Gson gson = new GsonBuilder().create();
-    public static VoicePacket.SyncData serverSettings = new VoicePacket.SyncData(48_000, 16, 960 * 10, true, 15.d, new VoiceSettings.NoiseSuppression[]{VoiceSettings.NoiseSuppression.NONE, VoiceSettings.NoiseSuppression.RNNoise});
+    public static VoicePacket.SyncData serverSettings = new VoicePacket.SyncData(48_000, 16, 960 * 1, true, 15.d, new VoiceSettings.NoiseSuppression[]{VoiceSettings.NoiseSuppression.NONE, VoiceSettings.NoiseSuppression.RNNoise});
 
     public static final boolean debug = false;
 

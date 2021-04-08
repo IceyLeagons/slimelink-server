@@ -2,10 +2,10 @@ package net.iceyleagons.slimelink.server;
 
 import lombok.Getter;
 import lombok.SneakyThrows;
-import net.iceyleagons.slimelink.utils.Caesar;
-import net.iceyleagons.slimelink.utils.GZIPUtils;
 import net.iceyleagons.slimelink.VoicePacket;
 import net.iceyleagons.slimelink.VoicePacket.PacketType;
+import net.iceyleagons.slimelink.utils.Caesar;
+import net.iceyleagons.slimelink.utils.GZIPUtils;
 import org.java_websocket.WebSocket;
 import org.java_websocket.handshake.ClientHandshake;
 import org.java_websocket.server.WebSocketServer;
@@ -36,7 +36,7 @@ public class WSServer extends WebSocketServer {
     @SneakyThrows
     @Override
     public void onOpen(WebSocket conn, ClientHandshake handshake) {
-        System.out.println("Connection from " +  conn.getRemoteSocketAddress().getAddress().getHostAddress());
+        System.out.println("Connection from " + conn.getRemoteSocketAddress().getAddress().getHostAddress());
     }
 
     @Override
@@ -64,7 +64,10 @@ public class WSServer extends WebSocketServer {
         switch (packet.packetType) {
             default:
             case VOICE:
-                broadcast(PacketType.VOICE, packet);
+                clientMap.get(packet.playerName).handleVoice(packet);
+                break;
+            case STATE:
+                broadcast(PacketType.STATE, packet);
                 break;
             case READY:
                 // Player is ready to receive voice!
@@ -74,6 +77,7 @@ public class WSServer extends WebSocketServer {
                 break;
             case CLIENT_LEAVE:
                 clientMap.remove(packet.playerName);
+                conn.close(0);
                 break;
         }
     }
@@ -105,19 +109,28 @@ public class WSServer extends WebSocketServer {
     public void broadcast(PacketType packetType, VoicePacket originalPacket) {
         VoicePacket packet = clonePacket(packetType, originalPacket, false);
 
-        if (!ServerUtils.debug)
-            Arrays.stream(packet.playerNames)
+        if (!ServerUtils.debug) {
+            if (!packetType.equals(PacketType.STATE))
+                Arrays.stream(packet.playerNames)
+                        .filter(name -> !name.equals(originalPacket.playerName))
+                        .filter(clientMap::containsKey)
+                        .map(clientMap::get)
+                        .filter(client -> packet.dead == client.dead || !packet.dead || ServerUtils.impostorChat && packet.impostor && client.isImpostor())
+                        .filter(client -> ServerUtils.serverSettings.hearingRange > packet.position.distanceTo(client.lastKnownPosition))
+                        .forEach(client -> {
+                            if (client.isImpostor() && packet.impostor)
+                                client.sendPacket(clonePacket(packetType, originalPacket, true));
+                            else client.sendPacket(packet);
+                        });
+            else Arrays.stream(packet.playerNames)
                     .filter(name -> !name.equals(originalPacket.playerName))
                     .filter(clientMap::containsKey)
                     .map(clientMap::get)
-                    .filter(client -> packet.dead == client.dead || !packet.dead || ServerUtils.impostorChat && packet.impostor && client.isImpostor())
-                    .filter(client -> ServerUtils.serverSettings.hearingRange > packet.position.distanceTo(client.lastKnownPosition))
-                    .forEach(client -> {
-                        if (client.isImpostor() && packet.impostor)
-                            client.sendPacket(clonePacket(packetType, originalPacket, true));
-                        else client.sendPacket(packet);
-                    });
-        else clientMap.get(packet.playerName).sendPacket(packet);
+                    .forEach(client -> client.sendPacket(packet));
+        } else {
+            System.out.println("OK");
+            clientMap.get(packet.playerName).sendPacket(packet);
+        }
     }
 
     public VoicePacket createPacket(PacketType packetType, String data) {
@@ -163,7 +176,6 @@ public class WSServer extends WebSocketServer {
 
         @SneakyThrows
         public void sendPacket(VoicePacket packet) {
-            System.out.println("Sending packet{TYPE=" + packet.packetType.name().toUpperCase() + "}!");
             if (caesar != 0)
                 broadcast(GZIPUtils.gzipCompress(Caesar.encrypt(packet.toString(), caesar).getBytes()), Collections.singleton(socket));
             else broadcast(packet.compress(), Collections.singleton(socket));

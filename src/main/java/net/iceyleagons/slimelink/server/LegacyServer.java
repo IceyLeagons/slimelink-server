@@ -13,14 +13,14 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
-public class VoiceServer {
+public class LegacyServer {
     private ServerSocket serverSocket;
 
     private String settings;
 
     private final int port;
 
-    public VoiceServer(int port) {
+    public LegacyServer(int port) {
         recomputeSettings();
         this.port = port;
     }
@@ -54,7 +54,6 @@ public class VoiceServer {
     @SneakyThrows
     public void onClientSync(Socket socket, VoicePacket packet) {
         if (!playerMap.containsKey(packet.playerName)) {
-            System.out.println("Syncing player " + packet.playerName);
             RemoteClient client = new RemoteClient(socket);
             client.sendPacket(createPacket(VoicePacket.PacketType.SYNC, settings));
             playerMap.put(packet.playerName, client);
@@ -91,6 +90,9 @@ public class VoiceServer {
                             default:
                             case VOICE:
                                 handleVoice(packet);
+                                break;
+                            case STATE:
+                                broadcast(VoicePacket.PacketType.STATE, packet);
                                 break;
                             case READY:
                                 // Ignore.
@@ -147,19 +149,25 @@ public class VoiceServer {
         ServerUtils.executorService.execute(() -> {
             VoicePacket packet = clonePacket(packetType, originalPacket, false);
 
-            if (!ServerUtils.debug)
-                Arrays.stream(packet.playerNames)
+            if (!ServerUtils.debug) {
+                if (!packetType.equals(VoicePacket.PacketType.STATE))
+                    Arrays.stream(packet.playerNames)
+                            .filter(name -> !name.equals(originalPacket.playerName))
+                            .filter(playerMap::containsKey)
+                            .map(playerMap::get)
+                            .filter(client -> packet.dead == client.dead || !packet.dead || ServerUtils.impostorChat && packet.impostor && client.isImpostor())
+                            .filter(client -> ServerUtils.serverSettings.hearingRange > packet.position.distanceTo(client.lastKnownPosition))
+                            .forEach(client -> {
+                                if (client.isImpostor() && packet.impostor)
+                                    client.sendPacket(clonePacket(packetType, originalPacket, true));
+                                else client.sendPacket(packet);
+                            });
+                else Arrays.stream(packet.playerNames)
                         .filter(name -> !name.equals(originalPacket.playerName))
                         .filter(playerMap::containsKey)
                         .map(playerMap::get)
-                        .filter(client -> packet.dead == client.dead || !packet.dead || ServerUtils.impostorChat && packet.impostor && client.isImpostor())
-                        .filter(client -> ServerUtils.serverSettings.hearingRange > packet.position.distanceTo(client.lastKnownPosition))
-                        .forEach(client -> {
-                            if (client.isImpostor() && packet.impostor)
-                                client.sendPacket(clonePacket(packetType, originalPacket, true));
-                            else client.sendPacket(packet);
-                        });
-            else playerMap.get(packet.playerName).sendPacket(packet);
+                        .forEach(client -> client.sendPacket(packet));
+            } else playerMap.get(packet.playerName).sendPacket(packet);
         });
     }
 

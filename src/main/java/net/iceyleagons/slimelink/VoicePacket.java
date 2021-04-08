@@ -53,7 +53,7 @@ public class VoicePacket {
         stream.write(compress());
     }
 
-    public void send(WebSocket socket) throws IOException {
+    public void send(WebSocket socket) {
         socket.send(compress());
     }
 
@@ -89,7 +89,13 @@ public class VoicePacket {
     }
 
     public enum PacketType {
-        READY, CLIENT_LEAVE, SYNC, VOICE
+        READY, CLIENT_LEAVE, SYNC, VOICE, STATE
+    }
+
+    @AllArgsConstructor
+    public static class StateData {
+        public boolean muted;
+        public boolean deafened;
     }
 
     @AllArgsConstructor
