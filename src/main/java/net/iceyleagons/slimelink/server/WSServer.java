@@ -67,7 +67,7 @@ public class WSServer extends WebSocketServer {
                 clientMap.get(packet.playerName).handleVoice(packet);
                 break;
             case STATE:
-                broadcast(PacketType.STATE, packet);
+                clientMap.get(packet.playerName).handleState(packet);
                 break;
             case READY:
                 // Player is ready to receive voice!
@@ -106,23 +106,36 @@ public class WSServer extends WebSocketServer {
                 broadcast(message, Arrays.stream(clients).map(RemoteClient::getSocket).collect(Collectors.toSet()));
     }
 
-    public void broadcast(PacketType packetType, VoicePacket originalPacket) {
+    int i = 0;
+
+    public void broadcast(RemoteClient sender, PacketType packetType, VoicePacket originalPacket) {
         VoicePacket packet = clonePacket(packetType, originalPacket, false);
 
         if (!ServerUtils.debug) {
-            if (!packetType.equals(PacketType.STATE))
-                Arrays.stream(packet.playerNames)
-                        .filter(name -> !name.equals(originalPacket.playerName))
-                        .filter(clientMap::containsKey)
-                        .map(clientMap::get)
-                        .filter(client -> packet.dead == client.dead || !packet.dead || ServerUtils.impostorChat && packet.impostor && client.isImpostor())
-                        .filter(client -> ServerUtils.serverSettings.hearingRange > packet.position.distanceTo(client.lastKnownPosition))
-                        .forEach(client -> {
-                            if (client.isImpostor() && packet.impostor)
-                                client.sendPacket(clonePacket(packetType, originalPacket, true));
-                            else client.sendPacket(packet);
-                        });
-            else Arrays.stream(packet.playerNames)
+            Arrays.stream(sender.players)
+                    .map(s -> s.strip().replace(" ", ""))
+                    .filter(name -> !name.equals(originalPacket.playerName))
+                    .filter(clientMap::containsKey)
+                    .map(clientMap::get)
+                    .filter(client -> packet.dead == client.dead || !packet.dead || ServerUtils.impostorChat && packet.impostor && client.isImpostor())
+                    .filter(client -> ServerUtils.serverSettings.hearingRange > packet.position.distanceTo(client.lastKnownPosition))
+                    .forEach(client -> {
+                        if (client.isImpostor() && packet.impostor)
+                            client.sendPacket(clonePacket(packetType, originalPacket, true));
+                        else client.sendPacket(packet);
+                    });
+        } else {
+            System.out.println("OK");
+            clientMap.get(packet.playerName).sendPacket(packet);
+        }
+    }
+
+    public void broadcastState(RemoteClient sender, VoicePacket originalPacket) {
+        VoicePacket packet = cloneStatePacket(originalPacket, ServerUtils.gson.fromJson(originalPacket.data, VoicePacket.StateData.class));
+
+        if (!ServerUtils.debug) {
+            Arrays.stream(sender.players)
+                    .map(s -> s.strip().replace(" ", ""))
                     .filter(name -> !name.equals(originalPacket.playerName))
                     .filter(clientMap::containsKey)
                     .map(clientMap::get)
@@ -136,14 +149,18 @@ public class WSServer extends WebSocketServer {
     public VoicePacket createPacket(PacketType packetType, String data) {
         VoicePacket packet;
         if (data != null)
-            packet = new VoicePacket(packetType, "SERVER", new String[0], false, false, data, new VoicePacket.Position(0, 0, 0));
-        else packet = new VoicePacket(packetType, "SERVER", new String[0], false, false);
+            packet = new VoicePacket(packetType, "SERVER", false, false, data, new VoicePacket.Position(0, 0, 0));
+        else packet = new VoicePacket(packetType, "SERVER", false, false);
 
         return packet;
     }
 
     public VoicePacket clonePacket(PacketType packetType, VoicePacket packet, boolean copyImpostor) {
-        return new VoicePacket(packetType, packet.playerName, packet.playerNames, packet.dead, copyImpostor && packet.impostor, packet.data, packet.position);
+        return new VoicePacket(packetType, packet.playerName, packet.dead, copyImpostor && packet.impostor, packet.data, packet.position);
+    }
+
+    public VoicePacket cloneStatePacket(VoicePacket packet, VoicePacket.StateData stateData) {
+        return new VoicePacket(PacketType.STATE, packet.playerName, false, false, ServerUtils.gson.toJson(new VoicePacket.StateData(stateData.muted, stateData.deafened, new String[0])), packet.position);
     }
 
     @Getter
@@ -153,6 +170,8 @@ public class WSServer extends WebSocketServer {
         VoicePacket.Position lastKnownPosition = new VoicePacket.Position(0, 0, 0);
         boolean dead = false;
         boolean impostor = false;
+
+        String[] players = new String[0];
 
         int caesar = 0;
 
@@ -182,12 +201,17 @@ public class WSServer extends WebSocketServer {
             //outputStream.writeUTF(VoiceServer.gson.toJson(packet));
         }
 
+        public void handleState(VoicePacket packet) {
+            this.players = ServerUtils.gson.fromJson(packet.data, VoicePacket.StateData.class).players;
+            broadcastState(this, packet);
+        }
+
         public void handleVoice(VoicePacket packet) {
             this.lastKnownPosition = packet.position;
             this.dead = packet.dead;
             this.impostor = packet.impostor;
 
-            broadcast(PacketType.VOICE, packet);
+            broadcast(this, PacketType.VOICE, packet);
         }
     }
 }

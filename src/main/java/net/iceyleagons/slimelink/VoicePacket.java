@@ -23,9 +23,6 @@ public class VoicePacket {
     // Once registered (with the SYNC packet) this becomes irrelevant. (may be used for debugging purposes)
     @NonNull
     public final String playerName;
-    // This'll contain the name of the people we wish to send this packet to.
-    @NonNull
-    public final String[] playerNames;
     // Whether or not the player is dead. If they are dead, only dead players can hear them
     // otherwise both dead and alive players (within range) can hear them.
     @NonNull
@@ -39,10 +36,9 @@ public class VoicePacket {
     // The position of this player. Is used for the proximity function of the mod.
     public Position position;
 
-    public VoicePacket(PacketType packetType, String playerName, String[] playerNames, boolean dead, boolean impostor, byte[] data, Position position) {
+    public VoicePacket(PacketType packetType, String playerName, boolean dead, boolean impostor, byte[] data, Position position) {
         this.packetType = packetType;
         this.playerName = playerName;
-        this.playerNames = playerNames;
         this.dead = dead;
         this.impostor = impostor;
         this.data = Base64.getEncoder().encodeToString(data);
@@ -84,7 +80,7 @@ public class VoicePacket {
         }
 
         public double distanceTo(Position otherPoint) {
-            return Math.sqrt(Math.pow(x - otherPoint.x, 2) + Math.pow(y - otherPoint.y, 2) + Math.pow(z - otherPoint.z, 2));
+            return Math.sqrt(Math.pow(x - otherPoint.x, 2) + Math.pow(z - otherPoint.z, 2));
         }
     }
 
@@ -96,6 +92,8 @@ public class VoicePacket {
     public static class StateData {
         public boolean muted;
         public boolean deafened;
+
+        public String[] players;
     }
 
     @AllArgsConstructor

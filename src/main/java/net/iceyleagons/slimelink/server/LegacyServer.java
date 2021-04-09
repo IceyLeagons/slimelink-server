@@ -151,7 +151,7 @@ public class LegacyServer {
 
             if (!ServerUtils.debug) {
                 if (!packetType.equals(VoicePacket.PacketType.STATE))
-                    Arrays.stream(packet.playerNames)
+                    Arrays.stream(new String[0])
                             .filter(name -> !name.equals(originalPacket.playerName))
                             .filter(playerMap::containsKey)
                             .map(playerMap::get)
@@ -162,7 +162,7 @@ public class LegacyServer {
                                     client.sendPacket(clonePacket(packetType, originalPacket, true));
                                 else client.sendPacket(packet);
                             });
-                else Arrays.stream(packet.playerNames)
+                else Arrays.stream(new String[0])
                         .filter(name -> !name.equals(originalPacket.playerName))
                         .filter(playerMap::containsKey)
                         .map(playerMap::get)
@@ -178,14 +178,14 @@ public class LegacyServer {
     public VoicePacket createPacket(VoicePacket.PacketType packetType, String data) {
         VoicePacket packet;
         if (data != null)
-            packet = new VoicePacket(packetType, "SERVER", new String[0], false, false, data, new VoicePacket.Position(0, 0, 0));
-        else packet = new VoicePacket(packetType, "SERVER", new String[0], false, false);
+            packet = new VoicePacket(packetType, "SERVER", false, false, data, new VoicePacket.Position(0, 0, 0));
+        else packet = new VoicePacket(packetType, "SERVER", false, false);
 
         return packet;
     }
 
     public VoicePacket clonePacket(VoicePacket.PacketType packetType, VoicePacket packet, boolean copyImpostor) {
-        return new VoicePacket(packetType, packet.playerName, packet.playerNames, packet.dead, copyImpostor && packet.impostor, packet.data, packet.position);
+        return new VoicePacket(packetType, packet.playerName, packet.dead, copyImpostor && packet.impostor, packet.data, packet.position);
     }
 
 }
