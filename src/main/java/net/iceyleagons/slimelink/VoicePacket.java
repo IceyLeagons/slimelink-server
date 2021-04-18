@@ -1,9 +1,6 @@
 package net.iceyleagons.slimelink;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
+import lombok.*;
 import net.iceyleagons.slimelink.server.ServerUtils;
 import net.iceyleagons.slimelink.utils.GZIPUtils;
 import net.iceyleagons.slimelink.VoiceSettings.NoiseSuppression;
@@ -11,12 +8,17 @@ import org.java_websocket.WebSocket;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.util.Base64;
 
 @AllArgsConstructor
 @RequiredArgsConstructor
 public class VoicePacket {
 
+    @NonNull
+    public final String userId;
     @NonNull
     public final PacketType packetType;
     // The name of the sender.
@@ -36,7 +38,8 @@ public class VoicePacket {
     // The position of this player. Is used for the proximity function of the mod.
     public Position position;
 
-    public VoicePacket(PacketType packetType, String playerName, boolean dead, boolean impostor, byte[] data, Position position) {
+    public VoicePacket(String userId, PacketType packetType, String playerName, boolean dead, boolean impostor, byte[] data, Position position) {
+        this.userId = userId;
         this.packetType = packetType;
         this.playerName = playerName;
         this.dead = dead;
@@ -47,6 +50,12 @@ public class VoicePacket {
 
     public void send(OutputStream stream) throws IOException {
         stream.write(compress());
+    }
+
+    @SneakyThrows
+    public void send(DatagramSocket socket, InetAddress address, int port) {
+        byte[] data = compress();
+        socket.send(new DatagramPacket(data, data.length, address, port));
     }
 
     public void send(WebSocket socket) {
@@ -98,6 +107,8 @@ public class VoicePacket {
 
     @AllArgsConstructor
     public static class SyncData {
+        public String userId;
+
         public float sampleRate;
         public int bytes;
         public int bufferLength;
@@ -106,6 +117,9 @@ public class VoicePacket {
         // Why is this here? Because RNNoise is a bit weird, and it works on arrays with a size that's a multiple of 960.
         // So, supporting servers will have to have an array that has a size of 960*n
         public NoiseSuppression[] supportedNoiseSuppression;
+
+        public int opusFrameSize;
+        public int opusBitrate;
     }
 
 }
